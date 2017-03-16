@@ -3,7 +3,7 @@
 #SBATCH -J auto-particle-serial
 #SBATCH -o auto-particle-serial.stdout
 #SBATCH -n 1         
-#SBATCH -p normal
+#SBATCH -p gpudev
 #SBATCH -t 00:10:00
      
 rm serial_sum.txt
