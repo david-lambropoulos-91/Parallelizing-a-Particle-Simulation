@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A TG-CCR140008 # 2017 XSEDE Applications of Parallel Computing Course Allocation
+#SBATCH -A TG-ASC160007 # 2017 XSEDE Applications of Parallel Computing Course Allocation
 #SBATCH -J auto-particle-serial
 #SBATCH -o auto-particle-serial.stdout
 #SBATCH -n 1         

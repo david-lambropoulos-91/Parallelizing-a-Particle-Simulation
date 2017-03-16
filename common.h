@@ -1,6 +1,12 @@
 #ifndef __CS267_COMMON_H__
 #define __CS267_COMMON_H__
 
+#include <vector>
+
+// Tuned constants
+#define cutoff 0.01
+#define density 0.0005
+
 inline int min( int a, int b ) { return a < b ? a : b; }
 inline int max( int a, int b ) { return a > b ? a : b; }
 
@@ -13,15 +19,17 @@ const int SAVEFREQ = 10;
 //
 // particle data structure
 //
-typedef struct 
+typedef struct partical 
 {
-  double x;
-  double y;
-  double vx;
-  double vy;
-  double ax;
-  double ay;
+  double x;	// Position x
+  double y;	// Position y
+  double vx;	// Velocity x
+  double vy;	// Velocity y
+  double ax;	// Acceleration x
+  double ay;	// Acceleration y
 } particle_t;
+
+typedef std::vector<particle_t> bin_t;
 
 //
 //  timing routines
