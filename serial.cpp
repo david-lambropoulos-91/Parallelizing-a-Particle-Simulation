@@ -5,6 +5,10 @@
 #include <vector>
 #include "common.h"
 
+double binSize;		// Size of the each bin
+double gridSize;	// Size of the grid of bins
+int binNum;		// Bin number
+
 //
 //  benchmarking program
 //
@@ -36,6 +40,14 @@ int main( int argc, char **argv )
     set_size( n );
     init_particles( n, particles );
     
+    // Vector containing vectors (bins) of particles
+    //particleBins = <b1,b2,...,bn>
+    //b1 = <p1,...,pn>
+    //b2 = <p1,...,pn>
+    //...
+    //bn = <p1,...,pn>
+    std::vector< std::vector<particle_t> > particleBins;
+
     //
     //  simulate a number of time steps
     //
