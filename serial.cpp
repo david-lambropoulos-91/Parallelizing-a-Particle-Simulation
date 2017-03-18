@@ -48,7 +48,7 @@ int main( int argc, char **argv )
     //b2 = <p1,...,pn>
     //...
     //bn = <p1,...,pn>
-    std::vector< std::vector<particle_t> > particleBins;
+    std::vector< std::vector< particle_t > > particleBins;
 
     //
     //  Construct grid of bins
@@ -77,8 +77,8 @@ int main( int argc, char **argv )
     for( int i = 0; i < n; i++ )
     {	
 	// Obtain x and y coordinates
-	int x = ( int ) particle[ i ].x / sizeOfBin;
-	int y = ( int ) particle[ i ].y / sizeOfBin;
+	int x = ( int ) particles[ i ].x / sizeOfBin;
+	int y = ( int ) particles[ i ].y / sizeOfBin;
 
 	// Place particles in respective bin based on location
 	particleBins[ x * binsPerRow + y ].push_back( particles[ i ] );
@@ -94,23 +94,127 @@ int main( int argc, char **argv )
 	navg = 0;
         davg = 0.0;
 	dmin = 1.0;
-        //
+        
+	//
         //  compute forces
         //
-        for( int i = 0; i < n; i++ )
+        for( int i = 0; i < binsPerRow; i++ )
         {
-            particles[i].ax = particles[i].ay = 0;
-            for (int j = 0; j < n; j++ )
-				apply_force( particles[i], particles[j],&dmin,&davg,&navg);
+		for( int j = 0; j < binsPerRow; j++ )
+		{
+			// Grab first bin
+			std::vector< particle_t >& bin1 = particleBins[ i * binsPerRow + j ];
+			
+			// Obtain size of that bin
+			//int bin1_size = bin1.size( );
+
+			// Set acceleration in both x and y direction to 0
+			for( int k = 0; k < bin1.size(); k++ )
+			{
+				bin1[ k ].ax = bin1[ k ].ay = 0; 
+			}
+			
+			// Go through the Moore's neighborhood
+			// https://en.wikipedia.org/wiki/Moore_neighborhood 
+			//    +---+---+---+
+			//    |   |   |   |
+			//    +---+---+---+
+			//    |   | x |   |
+			//    +---+---+---+
+			//    |   |   |   |
+			//    +---+---+---+
+			//
+			//    *** Possible Improvement ***
+			//    As suggested in http://www.cs.cornell.edu/~bindel/class/cs5220-f11/notes/spatial.pdf
+			//    Given binsize >= 2*radius only need to check at most 3 neighbors and not the entire
+			//    neighborhood.
+			for( int ii = -1; ii <= 1; ii++ )
+			{
+				for( int jj = -1; jj <= 1; jj++ )
+				{
+					// Get (x,y) coordinate of neighbor
+					int neighborX = i + ii;
+					int neighborY = j + jj;
+	
+					// Check if neighbor coordinate isn't out of the grid
+					if( ( neighborX >= 0 && neighborX < binsPerRow ) && ( neighborY >= 0 && neighborY < binsPerRow ) )
+					{
+						// Grab neighbor bin
+						std::vector< particle_t >& bin2 = particleBins[ neighborX * binsPerRow + neighborY ];
+						
+						// Obtain size of neighbor bin
+						//int bin2_size = bin2.size( );
+
+						// Calculate force on bin by neighboring bin
+						for( int l = 0; l < bin1.size(); l++ )
+						{
+							for( int m = 0; m < bin2.size(); m++ )
+							{
+								apply_force( bin1[ l ], bin2[ m ], &dmin, &davg, &navg );
+							}
+						}
+					}
+				}			
+			} 
+		}			   
         }
  
+	// List of particles no longer in their original bin
+	std::list< particle_t > displacedParticles;
+	std::list< particle_t >::iterator it;
+
         //
         //  move particles
         //
-        for( int i = 0; i < n; i++ ) 
-            move( particles[i] );		
+        for( int i = 0; i < binsPerRow; i++ ) 
+        {
+		for( int j = 0; j < binsPerRow; j++ )
+		{
+			// Grab bin of particles
+			std::vector< particle_t >& bin = particleBins[ i * binsPerRow + j ];
+			
+			// Obtain the size of the bin
+			int bin_size = bin.size( );
+			
+			for( int k = 0; k < bin_size; )
+			{
+				move( bin[ k ] );
 
-        if( find_option( argc, argv, "-no" ) == -1 )
+				// Get new position; (x,y)
+				int x = ( int ) bin[ k ].x / sizeOfBin;
+				int y = ( int ) bin[ k ].y / sizeOfBin;
+				
+				// Check if the particle is still in the original bin
+				// if it is not move it to its new bin otherwise continue
+				if( ( x == i ) && ( y == j ) )
+				{
+					k++;
+				}
+				else
+				{
+					displacedParticles.push_back( bin[ k ] );
+					bin[ k ] = bin[ --bin_size ];		
+				}
+			}
+
+			bin.resize( bin_size );
+		}	
+	}
+        
+	//
+	//  Handle particles that moved outside of their bin
+	//
+	
+	for( it = displacedParticles.begin(); it != displacedParticles.end(); ++it )
+	{
+		int x = ( int ) it->x / sizeOfBin;
+		int y = ( int ) it->y / sizeOfBin;
+	
+		particleBins[ x * binsPerRow + y].push_back(*it);
+	}	
+
+
+	if( find_option( argc, argv, "-no" ) == -1 )
         {
           //
           // Computing statistical data
