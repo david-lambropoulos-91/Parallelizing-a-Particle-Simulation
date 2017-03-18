@@ -4,18 +4,20 @@
 #include <math.h>
 #include <vector>
 #include "common.h"
+#include <list>
+#include "Quadtree.cpp"
 
-double binSize;		// Size of the each bin
-double gridSize;	// Size of the grid of bins
-int binNum;		// Bin number
-
-//
 //  benchmarking program
 //
 int main( int argc, char **argv )
 {    
     int navg,nabsavg=0;
     double davg,dmin, absmin=1.0, absavg=0.0;
+
+    double sizeOfBin;         // Size of the each bin
+    double sizeOfGrid;        // Size of the grid of bins
+    int binsPerRow;           // Number of bins in row of (binsPerRow)x(binsPerRow) grid
+    int numOfBins;
 
     if( find_option( argc, argv, "-h" ) >= 0 )
     {
@@ -47,6 +49,40 @@ int main( int argc, char **argv )
     //...
     //bn = <p1,...,pn>
     std::vector< std::vector<particle_t> > particleBins;
+
+    //
+    //  Construct grid of bins
+    //
+
+    sizeOfGrid = sqrt( n * density );
+    sizeOfBin = cutoff * 2;
+    binsPerRow = ( int ) floor( sizeOfGrid / sizeOfBin );
+    numOfBins = binsPerRow * binsPerRow;
+
+    // Initialize the root node
+    Node * rootNode = new Node;    //Initialised node
+    
+    setnode(rootNode, 0, 0, 500, 500);
+    
+    for(int i = 0; i < n; i++)
+    {
+    	
+    }
+
+
+    // Set size of the particle bins vector
+    particleBins.resize( numOfBins );
+
+    // Populate particle vector with particles
+    for( int i = 0; i < n; i++ )
+    {	
+	// Obtain x and y coordinates
+	int x = ( int ) particle[ i ].x / sizeOfBin;
+	int y = ( int ) particle[ i ].y / sizeOfBin;
+
+	// Place particles in respective bin based on location
+	particleBins[ x * binsPerRow + y ].push_back( particles[ i ] );
+    }
 
     //
     //  simulate a number of time steps
