@@ -56,7 +56,7 @@ int main( int argc, char **argv )
 
     sizeOfGrid = sqrt( n * density );
     sizeOfBin = cutoff * 2;
-    binsPerRow = ( int ) floor( sizeOfGrid / sizeOfBin );
+    binsPerRow = ( int ) (sizeOfGrid / sizeOfBin) + 1;
     numOfBins = binsPerRow * binsPerRow;
 
     // Initialize the root node
@@ -84,6 +84,10 @@ int main( int argc, char **argv )
 	particleBins[ x * binsPerRow + y ].push_back( particles[ i ] );
     }
 
+        // List of particles no longer in their original bin
+        std::list< particle_t > displacedParticles;
+     	std::list< particle_t >::iterator it;
+
     //
     //  simulate a number of time steps
     //
@@ -106,10 +110,10 @@ int main( int argc, char **argv )
 			std::vector< particle_t >& bin1 = particleBins[ i * binsPerRow + j ];
 			
 			// Obtain size of that bin
-			//int bin1_size = bin1.size( );
+			int bin1_size = bin1.size( );
 
 			// Set acceleration in both x and y direction to 0
-			for( int k = 0; k < bin1.size(); k++ )
+			for( int k = 0; k < bin1_size; k++ )
 			{
 				bin1[ k ].ax = bin1[ k ].ay = 0; 
 			}
@@ -137,18 +141,18 @@ int main( int argc, char **argv )
 					int neighborY = j + jj;
 	
 					// Check if neighbor coordinate isn't out of the grid
-					if( ( neighborX >= 0 && neighborX < binsPerRow ) && ( neighborY >= 0 && neighborY < binsPerRow ) )
+					if( neighborX >= 0 && neighborX < binsPerRow  &&  neighborY >= 0 && neighborY < binsPerRow  )
 					{
 						// Grab neighbor bin
 						std::vector< particle_t >& bin2 = particleBins[ neighborX * binsPerRow + neighborY ];
 						
 						// Obtain size of neighbor bin
-						//int bin2_size = bin2.size( );
+						int bin2_size = bin2.size( );
 
 						// Calculate force on bin by neighboring bin
-						for( int l = 0; l < bin1.size(); l++ )
+						for( int l = 0; l < bin1_size; l++ )
 						{
-							for( int m = 0; m < bin2.size(); m++ )
+							for( int m = 0; m < bin2_size; m++ )
 							{
 								apply_force( bin1[ l ], bin2[ m ], &dmin, &davg, &navg );
 							}
@@ -160,8 +164,8 @@ int main( int argc, char **argv )
         }
  
 	// List of particles no longer in their original bin
-	std::list< particle_t > displacedParticles;
-	std::list< particle_t >::iterator it;
+//	std::list< particle_t > displacedParticles;
+//	std::list< particle_t >::iterator it;
 
         //
         //  move particles
@@ -175,8 +179,8 @@ int main( int argc, char **argv )
 			
 			// Obtain the size of the bin
 			int bin_size = bin.size( );
-			
-			for( int k = 0; k < bin_size; )
+			int k = 0;
+			for( ; k < bin_size; )
 			{
 				move( bin[ k ] );
 
@@ -186,7 +190,7 @@ int main( int argc, char **argv )
 				
 				// Check if the particle is still in the original bin
 				// if it is not move it to its new bin otherwise continue
-				if( ( x == i ) && ( y == j ) )
+				if( x == i && y == j )
 				{
 					k++;
 				}
@@ -197,7 +201,7 @@ int main( int argc, char **argv )
 				}
 			}
 
-			bin.resize( bin_size );
+			bin.resize( k );
 		}	
 	}
         
@@ -206,13 +210,18 @@ int main( int argc, char **argv )
 	//
 	
 	for( it = displacedParticles.begin(); it != displacedParticles.end(); ++it )
+	//for(int i = 0; i < displacedParticles.size(); i++)
 	{
+		//int x = ( int ) displacedParticles[ i ].x / sizeOfBin;
+		//int y = ( int ) displacedParticles[ i ].y / sizeOfBin;
 		int x = ( int ) it->x / sizeOfBin;
 		int y = ( int ) it->y / sizeOfBin;
-	
+
 		particleBins[ x * binsPerRow + y].push_back(*it);
+	//	particleBins[ x * binsPerRow + y ].push_back( displacedParticles[ i ] );
 	}	
 
+	displacedParticles.clear();
 
 	if( find_option( argc, argv, "-no" ) == -1 )
         {
