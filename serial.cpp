@@ -56,7 +56,7 @@ int main( int argc, char **argv )
 
     sizeOfGrid = sqrt( n * density );
     sizeOfBin = cutoff * 2;
-    binsPerRow = ( int ) (sizeOfGrid / sizeOfBin) + 1;
+    binsPerRow = ( int ) ( sizeOfGrid / sizeOfBin ) + 3;
     numOfBins = binsPerRow * binsPerRow;
 
     // Initialize the root node
@@ -107,7 +107,7 @@ int main( int argc, char **argv )
 		for( int j = 0; j < binsPerRow; j++ )
 		{
 			// Grab first bin
-			std::vector< particle_t >& bin1 = particleBins[ i * binsPerRow + j ];
+			std::vector< particle_t > bin1 = particleBins[ i * binsPerRow + j ];
 			
 			// Obtain size of that bin
 			int bin1_size = bin1.size( );
@@ -141,10 +141,10 @@ int main( int argc, char **argv )
 					int neighborY = j + jj;
 	
 					// Check if neighbor coordinate isn't out of the grid
-					if( neighborX >= 0 && neighborX < binsPerRow  &&  neighborY >= 0 && neighborY < binsPerRow  )
+					if( (neighborX >= 0 && neighborX < binsPerRow)  &&  (neighborY >= 0 && neighborY < binsPerRow)  )
 					{
 						// Grab neighbor bin
-						std::vector< particle_t >& bin2 = particleBins[ neighborX * binsPerRow + neighborY ];
+						std::vector< particle_t > bin2 = particleBins[ neighborX * binsPerRow + neighborY ];
 						
 						// Obtain size of neighbor bin
 						int bin2_size = bin2.size( );
@@ -210,15 +210,11 @@ int main( int argc, char **argv )
 	//
 	
 	for( it = displacedParticles.begin(); it != displacedParticles.end(); ++it )
-	//for(int i = 0; i < displacedParticles.size(); i++)
 	{
-		//int x = ( int ) displacedParticles[ i ].x / sizeOfBin;
-		//int y = ( int ) displacedParticles[ i ].y / sizeOfBin;
 		int x = ( int ) it->x / sizeOfBin;
 		int y = ( int ) it->y / sizeOfBin;
 
 		particleBins[ x * binsPerRow + y].push_back(*it);
-	//	particleBins[ x * binsPerRow + y ].push_back( displacedParticles[ i ] );
 	}	
 
 	displacedParticles.clear();
