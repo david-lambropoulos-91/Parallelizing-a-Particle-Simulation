@@ -4,6 +4,9 @@
 #include <math.h>
 #include "common.h"
 #include "omp.h"
+#include <list>
+#include "Quadtree.cpp"
+#include <vector>
 
 //
 //  benchmarking program
@@ -12,7 +15,13 @@ int main( int argc, char **argv )
 {   
     int navg,nabsavg=0,numthreads; 
     double dmin, absmin=1.0,davg,absavg=0.0;
-	
+    
+    double sizeOfBin;         // Size of the each bin
+    double sizeOfGrid;        // Size of the grid of bins
+    int binsPerRow;           // Number of bins in row of (binsPerRow)x(binsPerRow) grid
+    int numOfBins;
+    int numThreads;	// Holds number of threads
+
     if( find_option( argc, argv, "-h" ) >= 0 )
     {
         printf( "Options:\n" );
@@ -25,6 +34,7 @@ int main( int argc, char **argv )
     }
 
     int n = read_int( argc, argv, "-n", 1000 );
+    
     char *savename = read_string( argc, argv, "-o", NULL );
     char *sumname = read_string( argc, argv, "-s", NULL );
 
@@ -35,6 +45,59 @@ int main( int argc, char **argv )
     set_size( n );
     init_particles( n, particles );
 
+
+    // Vector containing vectors (bins) of particles
+    //particleBins = <b1,b2,...,bn>
+    //b1 = <p1,...,pn>
+    //b2 = <p1,...,pn>
+    //...
+    //bn = <p1,...,pn>
+    std::vector< std::vector< particle_t > > particleBins;
+
+    //
+    //  Construct grid of bins
+    //
+
+    sizeOfGrid = sqrt( n * density );
+    sizeOfBin = cutoff * 2;
+    binsPerRow = ( int ) (sizeOfGrid / sizeOfBin) + 3;
+    numOfBins = binsPerRow * binsPerRow;
+
+    // Initialize the root node
+    Node * rootNode = new Node;    //Initialised node
+
+    setnode(rootNode, 0, 0, 500, 500);
+
+    for(int i = 0; i < n; i++)
+    {
+
+    }
+
+
+    // Set size of the particle bins vector
+    particleBins.resize( numOfBins );
+
+    // Populate particle vector with particles
+    for( int i = 0; i < n; i++ )
+    {
+        // Obtain x and y coordinates
+        int x = ( int ) particles[ i ].x / sizeOfBin;
+        int y = ( int ) particles[ i ].y / sizeOfBin;
+
+        // Place particles in respective bin based on location
+        particleBins[ x * binsPerRow + y ].push_back( particles[ i ] );
+    }
+
+        // List of particles no longer in their original bin
+        std::list< particle_t > displacedParticles;
+        std::list< particle_t >::iterator it;
+
+    //#pragma omp master
+    //{
+    //	numThreads = omp_get_num_threads();	
+    //}
+
+
     //
     //  simulate a number of time steps
     //
@@ -43,11 +106,14 @@ int main( int argc, char **argv )
     #pragma omp parallel private(dmin) 
     {
     numthreads = omp_get_num_threads();
-    for( int step = 0; step < 1000; step++ )
+    for( int step = 0; step < NSTEPS; step++ )
     {
         navg = 0;
         davg = 0.0;
 	dmin = 1.0;
+       
+	
+
         //
         //  compute all forces
         //
