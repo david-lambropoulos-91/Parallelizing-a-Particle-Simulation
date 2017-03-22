@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include "common.h"
+#include "Quadtree.cpp"
+#include <vector>
 
 //
 //  benchmarking program
