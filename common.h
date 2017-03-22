@@ -1,8 +1,6 @@
 #ifndef __CS267_COMMON_H__
 #define __CS267_COMMON_H__
 
-#include <vector>
-
 // Tuned constants
 #define cutoff 0.01
 #define density 0.0005
@@ -28,8 +26,6 @@ typedef struct partical
   double ax;	// Acceleration x
   double ay;	// Acceleration y
 } particle_t;
-
-typedef std::vector<particle_t> bin_t;
 
 //
 //  timing routines
