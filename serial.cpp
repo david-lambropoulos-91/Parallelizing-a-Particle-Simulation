@@ -2,275 +2,227 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
-#include <vector>
 #include "common.h"
-#include <list>
+#include <vector>
+#include <iostream>
 #include "Quadtree.cpp"
 
+using namespace std;
+
+typedef vector< vector< particle_t* > > particleGrid;
+typedef vector< particle_t* > gridBin;
+
+//
+//create bins with length of cutoff
+//
+int create_bins( particleGrid &bins, particle_t* particles, int n ) 
+{
+int binsPerRow = ceil( sqrt( density * n ) / cutoff );
+//resize the vector to the exact size of bins.
+bins.resize( binsPerRow * binsPerRow );
+
+return binsPerRow;
+}
+
+void move_particles( particle_t* particles, int n )
+{
+//  move particles
+for( int p = 0; p < n; p++ )
+move( particles[ p ] );
+}
+
+void clean_bins( particleGrid &bins, int numOfBins )
+{
+//clean the bins
+for( int i = 0; i < numOfBins; i++ )
+{
+bins[i].clear();
+}
+}
+
+void compute_forces(int numOfBins, int binsPerRow, particleGrid &bins, particle_t* particles, double davg, double dmin, int navg)
+{
+//
+//  compute forces
+//
+for ( int i = 0; i < numOfBins; i++ )
+{
+gridBin binQ = bins[i];
+int numParticlesPerBin = binQ.size();
+for (int j = 0; j < numParticlesPerBin; j++) {
+particles[j].ax = particles[j].ay = 0;
+}
+
+int location = i;
+vector<int> x;
+vector<int> y;
+
+x.push_back(0);
+y.push_back(0);
+if (location >= binsPerRow) {
+y.push_back(-1);
+}
+if (location < binsPerRow*(binsPerRow - 1)) {
+y.push_back(1);
+}
+if (location % binsPerRow != 0) {
+x.push_back(-1);
+}
+if (location % binsPerRow != binsPerRow - 1) {
+x.push_back(1);
+}
+
+
+//This should manage the ranges such that the halo region is searched.
+int xSize = x.size();
+int ySize = y.size();
+int binSize = bins[i].size();
+for (int a = 0; a < xSize; a++) 
+{
+for (int b = 0; b < ySize; b++) 
+{
+int bin_num = i + x[a] + binsPerRow*y[b];
+int binSize2 = bins[bin_num].size();
+for (int c = 0; c < binSize; c++) 
+{
+for (int d = 0; d < binSize2; d++) 
+{
+apply_force(*bins[i][c], *bins[bin_num][d], &dmin, &davg, &navg);
+}
+}
+}
+}
+}
+}
+
+void relocate(particleGrid &bins, int binsPerRow, particle_t* particles, int n)
+{
+//put particles in bins according to their locations
+for( int j = 0; j < n; j++ )
+{
+int x = floor( particles[ j ].x/cutoff );
+int y = floor( particles[ j ].y/cutoff );
+bins[ x + binsPerRow * y ].push_back( particles + j );
+}
+}
+
+//
 //  benchmarking program
 //
 int main( int argc, char **argv )
-{    
-    int navg,nabsavg=0;
-    double davg,dmin, absmin=1.0, absavg=0.0;
+{
+int navg, nabsavg = 0;
+double davg, dmin, absmin = 1.0, absavg = 0.0;
 
-    double sizeOfBin;         // Size of the each bin
-    double sizeOfGrid;        // Size of the grid of bins
-    int binsPerRow;           // Number of bins in row of (binsPerRow)x(binsPerRow) grid
-    int numOfBins;
+if ( find_option( argc, argv, "-h" ) >= 0 )
+{
+printf( "Options:\n" );
+printf( "-h to see this help\n" );
+printf( "-n <int> to set the number of particles\n" );
+printf( "-o <filename> to specify the output file name\n" );
+printf( "-s <filename> to specify a summary file name\n" );
+printf( "-no turns off all correctness checks and particle output\n" );
+return 0;
+}
 
-    if( find_option( argc, argv, "-h" ) >= 0 )
-    {
-        printf( "Options:\n" );
-        printf( "-h to see this help\n" );
-        printf( "-n <int> to set the number of particles\n" );
-        printf( "-o <filename> to specify the output file name\n" );
-        printf( "-s <filename> to specify a summary file name\n" );
-        printf( "-no turns off all correctness checks and particle output\n");
-        return 0;
-    }
-    
-    int n = read_int( argc, argv, "-n", 1000 );
+int n = read_int(argc, argv, "-n", 1000);
 
-    char *savename = read_string( argc, argv, "-o", NULL );
-    char *sumname = read_string( argc, argv, "-s", NULL );
-    
-    FILE *fsave = savename ? fopen( savename, "w" ) : NULL;
-    FILE *fsum = sumname ? fopen ( sumname, "a" ) : NULL;
+char *savename = read_string( argc, argv, "-o", NULL );
+char *sumname = read_string( argc, argv, "-s", NULL );
 
-    particle_t *particles = (particle_t*) malloc( n * sizeof(particle_t) );
-    set_size( n );
-    init_particles( n, particles );
-    
-    // Vector containing vectors (bins) of particles
-    //particleBins = <b1,b2,...,bn>
-    //b1 = <p1,...,pn>
-    //b2 = <p1,...,pn>
-    //...
-    //bn = <p1,...,pn>
-    std::vector< std::vector< particle_t > > particleBins;
+FILE *fsave = savename ? fopen( savename, "w" ) : NULL;
+FILE *fsum = sumname ? fopen( sumname, "a" ) : NULL;
 
-    //
-    //  Construct grid of bins
-    //
+particle_t *particles;
 
-    sizeOfGrid = sqrt( n * density );
-    sizeOfBin = cutoff * 2;
-    binsPerRow = ( int ) ( sizeOfGrid / sizeOfBin ) + 3;
-    numOfBins = binsPerRow * binsPerRow;
+if ( ( particles = ( particle_t* ) malloc( n * sizeof( particle_t ) ) ) == NULL ) 
+{
+fprintf( stderr, "particles malloc NULL\n" );
+return 0;
+}
 
-    // Initialize the root node
-    Node * rootNode = new Node;    //Initialised node
-    
-    setnode(rootNode, 0, 0, 500, 500);
-    
-    for(int i = 0; i < n; i++)
-    {
-    	
-    }
+set_size( n );
+init_particles( n, particles );
 
+//create the bins to contain the particles
+particleGrid bins;
+int binsPerRow = create_bins( bins, particles, n );
 
-    // Set size of the particle bins vector
-    particleBins.resize( numOfBins );
+int numOfBins = binsPerRow * binsPerRow;
 
-    // Populate particle vector with particles
-    for( int i = 0; i < n; i++ )
-    {	
-	// Obtain x and y coordinates
-	int x = ( int ) particles[ i ].x / sizeOfBin;
-	int y = ( int ) particles[ i ].y / sizeOfBin;
+//
+//  simulate a number of time steps
+//
+double simulation_time = read_timer( );
 
-	// Place particles in respective bin based on location
-	particleBins[ x * binsPerRow + y ].push_back( particles[ i ] );
-    }
+for ( int step = 0; step < NSTEPS; step++ )
+{
 
-        // List of particles no longer in their original bin
-        std::list< particle_t > displacedParticles;
-     	std::list< particle_t >::iterator it;
+navg = 0;
+davg = 0.0;
+dmin = 1.0;
 
-    //
-    //  simulate a number of time steps
-    //
-    double simulation_time = read_timer( );
-	
-    for( int step = 0; step < NSTEPS; step++ )
-    {
-	navg = 0;
-        davg = 0.0;
-	dmin = 1.0;
-        
-	//
-        //  compute forces
-        //
-        for( int i = 0; i < binsPerRow; i++ )
-        {
-		for( int j = 0; j < binsPerRow; j++ )
-		{
-			// Grab first bin
-			std::vector< particle_t > bin1 = particleBins[ i * binsPerRow + j ];
-			
-			// Obtain size of that bin
-			int bin1_size = bin1.size( );
+clean_bins( bins, numOfBins );
 
-			// Set acceleration in both x and y direction to 0
-			for( int k = 0; k < bin1_size; k++ )
-			{
-				bin1[ k ].ax = bin1[ k ].ay = 0; 
-			}
-			
-			// Go through the Moore's neighborhood
-			// https://en.wikipedia.org/wiki/Moore_neighborhood 
-			//    +---+---+---+
-			//    |   |   |   |
-			//    +---+---+---+
-			//    |   | x |   |
-			//    +---+---+---+
-			//    |   |   |   |
-			//    +---+---+---+
-			//
-			//    *** Possible Improvement ***
-			//    As suggested in http://www.cs.cornell.edu/~bindel/class/cs5220-f11/notes/spatial.pdf
-			//    Given binsize >= 2*radius only need to check at most 3 neighbors and not the entire
-			//    neighborhood.
-			for( int ii = -1; ii <= 1; ii++ )
-			{
-				for( int jj = -1; jj <= 1; jj++ )
-				{
-					// Get (x,y) coordinate of neighbor
-					int neighborX = i + ii;
-					int neighborY = j + jj;
-	
-					// Check if neighbor coordinate isn't out of the grid
-					if( (neighborX >= 0 && neighborX < binsPerRow)  &&  (neighborY >= 0 && neighborY < binsPerRow)  )
-					{
-						// Grab neighbor bin
-						std::vector< particle_t > bin2 = particleBins[ neighborX * binsPerRow + neighborY ];
-						
-						// Obtain size of neighbor bin
-						int bin2_size = bin2.size( );
+relocate( bins, binsPerRow, particles, n);
 
-						// Calculate force on bin by neighboring bin
-						for( int l = 0; l < bin1_size; l++ )
-						{
-							for( int m = 0; m < bin2_size; m++ )
-							{
-								apply_force( bin1[ l ], bin2[ m ], &dmin, &davg, &navg );
-							}
-						}
-					}
-				}			
-			} 
-		}			   
-        }
- 
-	// List of particles no longer in their original bin
-//	std::list< particle_t > displacedParticles;
-//	std::list< particle_t >::iterator it;
+compute_forces( numOfBins, binsPerRow, bins, particles, davg, dmin, navg);
 
-        //
-        //  move particles
-        //
-        for( int i = 0; i < binsPerRow; i++ ) 
-        {
-		for( int j = 0; j < binsPerRow; j++ )
-		{
-			// Grab bin of particles
-			std::vector< particle_t >& bin = particleBins[ i * binsPerRow + j ];
-			
-			// Obtain the size of the bin
-			int bin_size = bin.size( );
-			int k = 0;
-			for( ; k < bin_size; )
-			{
-				move( bin[ k ] );
+move_particles( particles, n );
 
-				// Get new position; (x,y)
-				int x = ( int ) bin[ k ].x / sizeOfBin;
-				int y = ( int ) bin[ k ].y / sizeOfBin;
-				
-				// Check if the particle is still in the original bin
-				// if it is not move it to its new bin otherwise continue
-				if( x == i && y == j )
-				{
-					k++;
-				}
-				else
-				{
-					displacedParticles.push_back( bin[ k ] );
-					bin[ k ] = bin[ --bin_size ];		
-				}
-			}
+if (find_option(argc, argv, "-no") == -1)
+{
+//
+// Computing statistical data
+//
+if (navg) {
+absavg += davg / navg;
+nabsavg++;
+}
+if (dmin < absmin) absmin = dmin;
 
-			bin.resize( k );
-		}	
-	}
-        
-	//
-	//  Handle particles that moved outside of their bin
-	//
-	
-	for( it = displacedParticles.begin(); it != displacedParticles.end(); ++it )
-	{
-		int x = ( int ) it->x / sizeOfBin;
-		int y = ( int ) it->y / sizeOfBin;
+//
+//  save if necessary
+//
+if (fsave && (step%SAVEFREQ) == 0)
+save(fsave, n, particles);
+}
 
-		particleBins[ x * binsPerRow + y].push_back(*it);
-	}	
+}
+simulation_time = read_timer() - simulation_time;
 
-	displacedParticles.clear();
+printf("n = %d, simulation time = %g seconds", n, simulation_time);
 
-	if( find_option( argc, argv, "-no" ) == -1 )
-        {
-          //
-          // Computing statistical data
-          //
-          if (navg) {
-            absavg +=  davg/navg;
-            nabsavg++;
-          }
-          if (dmin < absmin) absmin = dmin;
-		
-          //
-          //  save if necessary
-          //
-          if( fsave && (step%SAVEFREQ) == 0 )
-              save( fsave, n, particles );
-        }
-    }
-    simulation_time = read_timer( ) - simulation_time;
-    
-    printf( "n = %d, simulation time = %g seconds", n, simulation_time);
+if (find_option(argc, argv, "-no") == -1)
+{
+if (nabsavg) absavg /= nabsavg;
+//
+//  -the minimum distance absmin between 2 particles during the run of the simulation
+//  -A Correct simulation will have particles stay at greater than 0.4 (of cutoff) with typical values between .7-.8
+//  -A simulation were particles don't interact correctly will be less than 0.4 (of cutoff) with typical values between .01-.05
+//
+//  -The average distance absavg is ~.95 when most particles are interacting correctly and ~.66 when no particles are interacting
+//
+printf(", absmin = %lf, absavg = %lf", absmin, absavg);
+if (absmin < 0.4) printf("\nThe minimum distance is below 0.4 meaning that some particle is not interacting");
+if (absavg < 0.8) printf("\nThe average distance is below 0.8 meaning that most particles are not interacting");
+}
+printf("\n");
 
-    if( find_option( argc, argv, "-no" ) == -1 )
-    {
-      if (nabsavg) absavg /= nabsavg;
-    // 
-    //  -the minimum distance absmin between 2 particles during the run of the simulation
-    //  -A Correct simulation will have particles stay at greater than 0.4 (of cutoff) with typical values between .7-.8
-    //  -A simulation were particles don't interact correctly will be less than 0.4 (of cutoff) with typical values between .01-.05
-    //
-    //  -The average distance absavg is ~.95 when most particles are interacting correctly and ~.66 when no particles are interacting
-    //
-    printf( ", absmin = %lf, absavg = %lf", absmin, absavg);
-    if (absmin < 0.4) printf ("\nThe minimum distance is below 0.4 meaning that some particle is not interacting");
-    if (absavg < 0.8) printf ("\nThe average distance is below 0.8 meaning that most particles are not interacting");
-    }
-    printf("\n");     
+//
+// Printing summary data
+//
+if (fsum)
+fprintf(fsum, "%d %g\n", n, simulation_time);
 
-    //
-    // Printing summary data
-    //
-    if( fsum) 
-        fprintf(fsum,"%d %g\n",n,simulation_time);
- 
-    //
-    // Clearing space
-    //
-    if( fsum )
-        fclose( fsum );    
-    free( particles );
-    if( fsave )
-        fclose( fsave );
-    
-    return 0;
+//
+// Clearing space
+//
+if (fsum)
+fclose(fsum);
+free(particles);
+if (fsave)
+fclose(fsave);
+
+return 0;
 }
