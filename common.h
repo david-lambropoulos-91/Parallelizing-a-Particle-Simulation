@@ -4,6 +4,7 @@
 // Tuned constants
 #define cutoff 0.01
 #define density 0.0005
+#define binsize ( cutoff * 4 )
 
 inline int min( int a, int b ) { return a < b ? a : b; }
 inline int max( int a, int b ) { return a > b ? a : b; }
