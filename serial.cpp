@@ -29,7 +29,9 @@ void move_particles( particle_t* particles, int n )
 {
 	//  move particles
 	for( int p = 0; p < n; p++ )
-	move( particles[ p ] );
+	{
+		move( particles[ p ] );
+	}
 }
 
 void clean_bins( particleGrid &bins, int numOfBins )
