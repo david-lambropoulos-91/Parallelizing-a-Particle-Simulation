@@ -9,57 +9,54 @@
 
 using namespace std;
 
-typedef vector< vector< particle_t* > > particleGrid;
 typedef vector< particle_t* > gridBin;
+typedef vector< gridBin > particleGrid;
+
+int navg, nabsavg = 0;
+double davg, dmin, absmin = 1.0, absavg = 0.0;
+
 
 //
 //create bins with length of cutoff
 //
 int create_bins( particleGrid &bins, particle_t* particles, int n ) 
 {
-	int binsPerRow = ceil( sqrt( density * n ) / cutoff );
+	int binsPerRow = ( int ) ceil( sqrt( density * n ) / ( 2 * cutoff ));
 
 	//resize the vector to the exact size of bins.
 	bins.resize( binsPerRow * binsPerRow );
 
+	//put particles in bins according to their locations
+	for ( int j = 0; j < n; j++ ) 
+	{
+		int x = ( int ) floor( particles[ j ].x / binsize );
+		int y = ( int ) floor( particles[ j ].y / binsize );
+
+		bins[ x + y * binsPerRow ].push_back( &particles[ j ] );
+	}
+
 	return binsPerRow;
 }
 
-void move_particles( particle_t* particles, int n )
+void compute_forces( particleGrid &bins, int numOfBins, int binsPerRow )
 {
-	//  move particles
-	for( int p = 0; p < n; p++ )
-	{
-		move( particles[ p ] );
-	}
-}
-
-void clean_bins( particleGrid &bins, int numOfBins )
-{
-	//clean the bins
-	for( int i = 0; i < numOfBins; i++ )
-	{	
-		bins[ i ].clear( );
-	}
-}
-
-void compute_forces( int numOfBins, int binsPerRow, particleGrid &bins, particle_t* particles, double davg, double dmin, int navg )
-{
-	//
-	//  compute forces
-	//
 	for ( int i = 0; i < numOfBins; i++ )
 	{
-		gridBin binQ = bins[ i ];
+		gridBin bin1 = bins[ i ];
+		int numOfParticles = bin1.size( );
 
-		int numParticlesPerBin = binQ.size( );
-
-		for ( int j = 0; j < numParticlesPerBin; j++ ) 
+		for ( int j = 0; j < numOfParticles; j++ ) 
 		{
-			particles[ j ].ax = particles[ j ].ay = 0;
+			bin1[ j ]->ax = bin1[ j ]->ay = 0;
 		}
 
+
+		//Search within current bin and a 'halo region'
+		//Halo region may be defined as the region around the bin of size 'cutoff'
+		//For ease in computation, the neighboring bins may be used as the halo.
+
 		int location = i;
+
 		vector< int > x;
 		vector< int > y;
 
@@ -76,33 +73,32 @@ void compute_forces( int numOfBins, int binsPerRow, particleGrid &bins, particle
 		}
 		if ( location % binsPerRow != 0 ) 
 		{
-   			x.push_back( -1 );
+			x.push_back( -1 );
 		}
 		if ( location % binsPerRow != binsPerRow - 1 ) 
 		{
 			x.push_back( 1 );
 		}
 
-
-		//This should manage the ranges such that the halo region is searched.
-		int xSize = x.size( );
-		int ySize = y.size( );
-		int binSize = bins[ i ].size( );
-		for ( int a = 0; a < xSize; a++ ) 
+		for ( int a = 0; a < x.size( ); a++ ) 
 		{
-			for ( int b = 0; b < ySize; b++ ) 
+			for ( int b = 0; b < y.size( ); b++ ) 
 			{
-				int bin_num = i + x[ a ] + binsPerRow*y[ b ];
-				int binSize2 = bins[ bin_num ].size( );
-				for ( int c = 0; c < binSize; c++ ) 
+				int bin_num = i + x[ a ] + binsPerRow * y[ b ];
+
+
+				for ( int c = 0; c < bins[ i ].size( ); c++ ) 
 				{
-					for ( int d = 0; d < binSize2; d++ ) 
+					for ( int d = 0; d < bins[ bin_num ].size( ); d++ ) 
 					{
+
 						apply_force( *bins[ i ][ c ], *bins[ bin_num ][ d ], &dmin, &davg, &navg );
+
 					}
 				}
 			}
 		}
+
 	}
 }
 
@@ -117,14 +113,57 @@ void relocate( particleGrid &bins, int binsPerRow, particle_t* particles, int n 
 	}
 }
 
+void clean_bins( particleGrid &bins, int numOfBins )
+{
+	//clean the bins
+	for( int i = 0; i < numOfBins; i++ )
+	{
+		bins[ i ].clear( );
+	}
+}
+
+void move_particles( particle_t* particles, particleGrid &bins, gridBin &displacedParticles, int n, int numOfBins, int binsPerRow )
+{
+	double binsizes = cutoff * 2;
+
+	for ( int b = 0; b < numOfBins; b++ )
+	{
+		int size = bins[ b ].size( );
+		for ( int p = 0; p < size; ) 
+		{
+			move( *bins[ b ][ p ] );
+
+			int x = ( int ) floor( bins[ b ][ p ]->x / binsizes );
+			int y = ( int ) floor( bins[ b ][ p ]->y / binsizes );
+			
+			if ( y * binsPerRow + x != b )
+			{
+				displacedParticles.push_back( bins[ b ][ p ] );
+				bins[ b ].erase( bins[ b ].begin( ) + p );
+				size--;
+			}
+			else
+			{
+				p++;
+			}
+		}
+	}
+
+	for( int i = 0; i < displacedParticles.size( ); i++ )
+	{
+		int x = ( int ) floor( displacedParticles[ i ]->x / binsize );
+		int y = ( int ) floor(displacedParticles[ i ]->y / binsize );
+
+		bins[ x + y * binsPerRow ].push_back( displacedParticles[ i ] );
+	}
+	displacedParticles.clear( );
+}
+
 //
 //  benchmarking program
 //
 int main( int argc, char **argv )
 {
-	int navg, nabsavg = 0;
-	double davg, dmin, absmin = 1.0, absavg = 0.0;
-
 	if ( find_option( argc, argv, "-h" ) >= 0 )
 	{
 		printf( "Options:\n" );
@@ -133,6 +172,7 @@ int main( int argc, char **argv )
 		printf( "-o <filename> to specify the output file name\n" );
 		printf( "-s <filename> to specify a summary file name\n" );
 		printf( "-no turns off all correctness checks and particle output\n" );
+		
 		return 0;
 	}
 
@@ -141,6 +181,7 @@ int main( int argc, char **argv )
 	char *savename = read_string( argc, argv, "-o", NULL );
 	char *sumname = read_string( argc, argv, "-s", NULL );
 
+
 	FILE *fsave = savename ? fopen( savename, "w" ) : NULL;
 	FILE *fsum = sumname ? fopen( sumname, "a" ) : NULL;
 
@@ -148,7 +189,8 @@ int main( int argc, char **argv )
 
 	if ( ( particles = ( particle_t* ) malloc( n * sizeof( particle_t ) ) ) == NULL ) 
 	{
-		fprintf( stderr, "particles malloc NULL\n" );
+		fprintf( stderr,"particles malloc NULL at line %d in file %s\n", __LINE__, __FILE__ );
+	
 		return 0;
 	}
 
@@ -157,29 +199,32 @@ int main( int argc, char **argv )
 
 	//create the bins to contain the particles
 	particleGrid bins;
-	int binsPerRow = create_bins( bins, particles, n );
+	gridBin displacedParticles;
 
+	int binsPerRow = create_bins( bins, particles, n );
 	int numOfBins = binsPerRow * binsPerRow;
 
 	//
 	//  simulate a number of time steps
 	//
 	double simulation_time = read_timer( );
-	
+
 	for ( int step = 0; step < NSTEPS; step++ )
 	{
-	
 		navg = 0;
 		davg = 0.0;
 		dmin = 1.0;
+		
+		//
+		//  compute forces
+		//
+		compute_forces( bins, numOfBins, binsPerRow );
 
-		clean_bins( bins, numOfBins );
-
-		relocate( bins, binsPerRow, particles, n );
-
-		compute_forces( numOfBins, binsPerRow, bins, particles, davg, dmin, navg );
-
-		move_particles( particles, n );
+		//
+		//  move particles
+		//  The particles must also be moved between bins as necessary.
+		//
+		move_particles( particles, bins, displacedParticles, n, numOfBins, binsPerRow );
 
 		if ( find_option( argc, argv, "-no" ) == -1 )
 		{
@@ -191,6 +236,7 @@ int main( int argc, char **argv )
 				absavg += davg / navg;
 				nabsavg++;
 			}
+			
 			if ( dmin < absmin ) absmin = dmin;
 
 			//
@@ -203,7 +249,6 @@ int main( int argc, char **argv )
 		}
 
 	}
-
 	simulation_time = read_timer( ) - simulation_time;
 
 	printf( "n = %d, simulation time = %g seconds", n, simulation_time );
@@ -211,6 +256,7 @@ int main( int argc, char **argv )
 	if ( find_option( argc, argv, "-no" ) == -1 )
 	{
 		if ( nabsavg ) absavg /= nabsavg;
+		
 		//
 		//  -the minimum distance absmin between 2 particles during the run of the simulation
 		//  -A Correct simulation will have particles stay at greater than 0.4 (of cutoff) with typical values between .7-.8
@@ -222,14 +268,16 @@ int main( int argc, char **argv )
 		if ( absmin < 0.4 ) printf( "\nThe minimum distance is below 0.4 meaning that some particle is not interacting" );
 		if ( absavg < 0.8 ) printf( "\nThe average distance is below 0.8 meaning that most particles are not interacting" );
 	}
+
 	printf( "\n" );
 
 	//
 	// Printing summary data
 	//
 	if ( fsum )
+	{
 		fprintf( fsum, "%d %g\n", n, simulation_time );
-
+	}
 	//
 	// Clearing space
 	//
